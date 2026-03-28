@@ -59,7 +59,7 @@ async fn save_env_key(key: String, value: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn call_mcp_tool(app: tauri::AppHandle, request: McpRequest) -> Result<McpResponse, String> {
-    let sidecar_command = app.shell().sidecar("bin/mcp_sidecar")
+    let sidecar_command = app.shell().sidecar("mcp_sidecar")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?;
 
     // In a real implementation with persistent sidecar, we would keep the process alive.

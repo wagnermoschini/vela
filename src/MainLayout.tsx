@@ -9,11 +9,13 @@ import {
   AppstoreOutlined,
   HistoryOutlined,
   ThunderboltOutlined,
-  SettingOutlined
+  SettingOutlined,
+  GlobalOutlined
 } from '@ant-design/icons';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import { SkillsLibrary } from './components/SkillsLibrary';
 import { DiagnosticView } from './components/DiagnosticView';
+import { ConnectorsView } from './components/ConnectorsView';
 import { ollamaService } from './services/ollama';
 import { mcpService } from './services/mcpService';
 
@@ -22,7 +24,7 @@ const { Title, Text } = Typography;
 
 export const MainLayout: React.FC = () => {
   const [sandpackVisible, setSandpackVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState<'chat' | 'skills' | 'diagnostic'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'skills' | 'diagnostic' | 'connectors'>('chat');
   const [mode, setMode] = useState<'co-work' | 'code'>('co-work');
   const [isStreaming, setIsStreaming] = useState(false);
   
@@ -187,12 +189,14 @@ export const MainLayout: React.FC = () => {
                 { key: 'chat-1', icon: <MessageOutlined />, label: 'Vela Workspace' },
                 { type: 'divider' },
                 { key: 'skills', icon: <AppstoreOutlined />, label: 'All Skills (MCP)' },
+                { key: 'connectors', icon: <GlobalOutlined />, label: 'Conectores' },
                 { key: 'diagnostic', icon: <SettingOutlined />, label: 'Diagnostics' },
                 { key: 'history', icon: <HistoryOutlined />, label: 'Full History' },
               ]}
               onClick={({ key }) => {
                 if (key === 'skills') setActiveTab('skills');
                 else if (key === 'diagnostic') setActiveTab('diagnostic');
+                else if (key === 'connectors') setActiveTab('connectors');
                 else setActiveTab('chat');
               }}
             />
@@ -286,6 +290,8 @@ export const MainLayout: React.FC = () => {
           </>
         ) : activeTab === 'skills' ? (
           <SkillsLibrary />
+        ) : activeTab === 'connectors' ? (
+          <ConnectorsView />
         ) : (
           <DiagnosticView />
         )}
