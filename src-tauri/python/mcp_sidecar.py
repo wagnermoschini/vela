@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import datetime
+import platform
+import subprocess
 
 # Tentativa de importar LanceDB para RAG (Retrieval-Augmented Generation)
 try:
@@ -50,6 +52,7 @@ if LANCEDB_AVAILABLE:
             text: str = embedding_func.SourceField()
             vector: Vector(embedding_func.ndims()) = embedding_func.VectorField()
             role: str
+            space_id: str
             timestamp: str
             metadata: str
 
@@ -125,6 +128,25 @@ def web_search(query):
         }
     except Exception as e:
         return {"error": f"Erro na busca Tavily: {str(e)}"}
+
+def detect_hardware():
+    """Detecta RAM e CPU (otimizado para Mac)."""
+    try:
+        # RAM
+        ram_bytes = subprocess.check_output(['sysctl', '-n', 'hw.memsize']).decode().strip()
+        ram_gb = int(ram_bytes) / (1024**3)
+        
+        # CPU
+        cpu_brand = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
+        
+        return {
+            "ram_gb": round(ram_gb, 2),
+            "cpu": cpu_brand,
+            "os": f"{platform.system()} {platform.machine()}",
+            "is_apple_silicon": "Apple" in cpu_brand
+        }
+    except Exception as e:
+        return {"error": f"Erro ao detectar hardware: {str(e)}"}
 
 def list_tools():
     tools = [
@@ -202,6 +224,14 @@ def list_tools():
                     "type": "object",
                     "properties": {}
                 }
+            },
+            {
+                "name": "detect_hardware",
+                "description": "Detecta especificações de hardware (RAM, CPU) para sugerir a melhor LLM.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
             }
         ])
     return {"tools": tools}
@@ -224,11 +254,15 @@ def call_tool(name, params):
     elif name == "atlassian_rovo":
         return atlassian_query(params.get("query"), params.get("site_url"), params.get("email"), params.get("api_token"))
 
+    elif name == "detect_hardware":
+        return detect_hardware()
+
     elif name == "memory_store" and LANCEDB_AVAILABLE:
         try:
             table.add([{
                 "text": params.get("content"),
                 "role": params.get("role"),
+                "space_id": params.get("space_id", "default"),
                 "timestamp": datetime.datetime.now().isoformat(),
                 "metadata": json.dumps(params.get("metadata", {}))
             }])
@@ -238,7 +272,15 @@ def call_tool(name, params):
 
     elif name == "memory_retrieve" and LANCEDB_AVAILABLE:
         try:
-            results = table.search(params.get("query")).limit(params.get("limit", 3)).to_list()
+            query = params.get("query")
+            space_id = params.get("space_id", "default")
+            
+            # Oráculo busca em tudo, outros buscam filtrado
+            search_op = table.search(query)
+            if space_id != "oracle":
+                search_op = search_op.where(f"space_id = '{space_id}'")
+            
+            results = search_op.limit(params.get("limit", 3)).to_list()
             memories = [{"text": r["text"], "role": r["role"], "date": r["timestamp"]} for r in results]
             return {"memories": memories}
         except Exception as e:

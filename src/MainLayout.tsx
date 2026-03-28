@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layout, Typography, Menu, Button, Space, Divider, Badge, message } from 'antd';
+import { Layout, Typography, Menu, Button, Space, Divider, Badge, message, Tag } from 'antd';
 import { Sender, Bubble } from '@ant-design/x';
 import { 
   FolderOpenOutlined, 
@@ -10,13 +10,18 @@ import {
   ThunderboltOutlined,
   SettingOutlined,
   GlobalOutlined,
-  DashboardOutlined
+  DashboardOutlined,
+  DatabaseOutlined,
+  UserOutlined,
+  BookOutlined,
+  CodeOutlined
 } from '@ant-design/icons';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import { SkillsLibrary } from './components/SkillsLibrary';
 import { DiagnosticView } from './components/DiagnosticView';
 import { ConnectorsView } from './components/ConnectorsView';
 import { SettingsView } from './components/SettingsView';
+import { OnboardingWizard } from './components/OnboardingWizard';
 import { ollamaService } from './services/ollama';
 import { mcpService } from './services/mcpService';
 import { VELA_SYSTEM_PROMPT } from './services/prompts';
@@ -24,10 +29,19 @@ import { VELA_SYSTEM_PROMPT } from './services/prompts';
 const { Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
+const SPACE_DEFS = {
+  oracle: { name: 'Oráculo', color: '#722ed1' },
+  work: { name: 'Trabalho', color: '#1890ff' },
+  personal: { name: 'Pessoal', color: '#52c41a' },
+  study: { name: 'Estudo', color: '#fa8c16' }
+};
+
 export const MainLayout: React.FC = () => {
   const [sandpackVisible, setSandpackVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'skills' | 'diagnostic' | 'connectors' | 'settings'>('chat');
+  const [activeSpace, setActiveSpace] = useState<string>(() => localStorage.getItem('vela_active_space') || 'work');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [onboardingVisible, setOnboardingVisible] = useState(() => !localStorage.getItem('vela_onboarded'));
   
   const [messages, setMessages] = useState<any[]>(() => {
     const persist = localStorage.getItem('vela_persist_history') !== 'false';
@@ -55,9 +69,24 @@ export const MainLayout: React.FC = () => {
     // Persist history
     const persist = localStorage.getItem('vela_persist_history') !== 'false';
     if (persist && messages.length > 0) {
-      localStorage.setItem('vela_chat_history', JSON.stringify(messages));
+      localStorage.setItem(`vela_chat_history_${activeSpace}`, JSON.stringify(messages));
     }
-  }, [messages]);
+  }, [messages, activeSpace]);
+
+  // Load messages when space changes
+  useEffect(() => {
+    const saved = localStorage.getItem(`vela_chat_history_${activeSpace}`);
+    if (saved) {
+      setMessages(JSON.parse(saved));
+    } else {
+      setMessages([{
+        key: '1',
+        content: `Você entrou no Espaço ${SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.name || activeSpace}. Como posso ajudar?`,
+        role: 'ai'
+      }]);
+    }
+    localStorage.setItem('vela_active_space', activeSpace);
+  }, [activeSpace]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isStreaming) return;
@@ -97,9 +126,9 @@ export const MainLayout: React.FC = () => {
       let contextPrefix = "";
       try {
         // Busca 1: Assunto Atual
-        const subjectResults = await mcpService.callTool('memory_retrieve', { query: inputValue, limit: 3 });
+        const subjectResults = await mcpService.callTool('memory_retrieve', { query: inputValue, limit: 3, space_id: activeSpace });
         // Busca 2: Preferências de Comportamento (Query Fixa)
-        const preferenceResults = await mcpService.callTool('memory_retrieve', { query: "comportamento estilo tom de voz preferências instruções de sistema", limit: 2 });
+        const preferenceResults = await mcpService.callTool('memory_retrieve', { query: "comportamento estilo tom de voz preferências instruções de sistema", limit: 2, space_id: activeSpace });
         
         const memories: string[] = [];
         
@@ -152,9 +181,9 @@ export const MainLayout: React.FC = () => {
           // 2. Persistência Automática (Memorização)
           try {
             // Salva a pergunta do usuário
-            await mcpService.callTool('memory_store', { content: inputValue, role: 'user' });
+            await mcpService.callTool('memory_store', { content: inputValue, role: 'user', space_id: activeSpace });
             // Salva a resposta da IA
-            await mcpService.callTool('memory_store', { content: fullText, role: 'assistant' });
+            await mcpService.callTool('memory_store', { content: fullText, role: 'assistant', space_id: activeSpace });
           } catch (storeErr) {
             console.warn('Falha ao salvar na memória:', storeErr);
           }
@@ -230,12 +259,22 @@ export const MainLayout: React.FC = () => {
                 { key: 'diagnostic', icon: <DashboardOutlined />, label: 'Diagnostics' },
                 { key: 'settings', icon: <SettingOutlined />, label: 'Configurações' },
                 { key: 'history', icon: <HistoryOutlined />, label: 'Full History' },
+                { type: 'divider' },
+                { key: 'space-oracle', icon: <DatabaseOutlined style={{ color: SPACE_DEFS.oracle.color }} />, label: 'Oráculo' },
+                { key: 'space-work', icon: <CodeOutlined style={{ color: SPACE_DEFS.work.color }} />, label: 'Trabalho' },
+                { key: 'space-personal', icon: <UserOutlined style={{ color: SPACE_DEFS.personal.color }} />, label: 'Pessoal' },
+                { key: 'space-study', icon: <BookOutlined style={{ color: SPACE_DEFS.study.color }} />, label: 'Estudo' },
               ]}
               onClick={({ key }) => {
                 if (key === 'skills') setActiveTab('skills');
                 else if (key === 'diagnostic') setActiveTab('diagnostic');
                 else if (key === 'connectors') setActiveTab('connectors');
                 else if (key === 'settings') setActiveTab('settings');
+                else if (key.startsWith('space-')) {
+                   const spaceId = key.split('-')[1];
+                   setActiveSpace(spaceId);
+                   setActiveTab('chat');
+                }
                 else setActiveTab('chat');
               }}
             />
@@ -261,7 +300,8 @@ export const MainLayout: React.FC = () => {
               background: 'rgba(255,255,255,0.5)'
             }}>
               <Space size="large">
-                <Title level={5} style={{ margin: 0 }}>Vela Co-work</Title>
+                <Title level={5} style={{ margin: 0 }}>Vela {SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.name || 'Co-work'}</Title>
+                <Tag color={SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.color}>Space: {activeSpace.toUpperCase()}</Tag>
               </Space>
               
               <Button 
@@ -359,6 +399,16 @@ export const MainLayout: React.FC = () => {
           </div>
         </Sider>
       )}
+
+      <OnboardingWizard 
+        visible={onboardingVisible} 
+        onFinish={(config) => {
+          localStorage.setItem('vela_onboarded', 'true');
+          localStorage.setItem('vela_config', JSON.stringify(config));
+          setOnboardingVisible(false);
+          window.location.reload();
+        }}
+      />
     </Layout>
   );
 };
