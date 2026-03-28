@@ -17,6 +17,7 @@ import { DiagnosticView } from './components/DiagnosticView';
 import { ConnectorsView } from './components/ConnectorsView';
 import { ollamaService } from './services/ollama';
 import { mcpService } from './services/mcpService';
+import { VELA_SYSTEM_PROMPT } from './services/prompts';
 
 const { Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -80,7 +81,7 @@ export const MainLayout: React.FC = () => {
       // 1. Busca Semântica (Recuperação de Memória)
       let contextPrefix = "";
       try {
-        const memoryResults = await mcpService.callTool('memory_retrieve', { query: inputValue, limit: 2 });
+        const memoryResults = await mcpService.callTool('memory_retrieve', { query: inputValue, limit: 3 });
         if (memoryResults && memoryResults.memories?.length > 0) {
           const memoriesStr = memoryResults.memories
             .map((m: any) => `[Em ${m.date}, você disse: ${m.text}]`)
@@ -98,9 +99,15 @@ export const MainLayout: React.FC = () => {
         finalHistory[finalHistory.length - 1].content = contextPrefix + finalHistory[finalHistory.length - 1].content;
     }
 
+    // Injetar Instrução de Sistema Mestre (Persona Vela Co-work)
+    const messagesWithSystem = [
+        { role: 'system' as any, content: VELA_SYSTEM_PROMPT },
+        ...finalHistory
+    ];
+
       await ollamaService.chatStream({
         model: targetModel,
-        messages: finalHistory,
+        messages: messagesWithSystem,
         onChunk: (chunk) => {
           setMessages(prev => prev.map(m => 
             m.key === assistantKey 
