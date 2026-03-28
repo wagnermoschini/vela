@@ -1,0 +1,10 @@
+#!/bin/bash
+# Script de encapsulamento para o sidecar Python do Vela
+# Isso garante que o Tauri consiga executar o script como um binário nativo.
+
+# Obtém o diretório onde este script está localizado
+CDIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Executa o script Python original passando todos os argumentos
+# Usa a primeira instância de python3 encontrada no PATH
+python3 "$CDIR/mcp_sidecar.py" "$@"

@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
 import { ConfigProvider, theme } from 'antd';
 import { MainLayout } from './MainLayout';
+import { FirstRunModal } from './components/FirstRunModal';
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isFirstRun, setIsFirstRun] = useState(false);
 
   useEffect(() => {
     // Check initial preference
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     setIsDarkMode(mediaQuery.matches);
+
+    // Check first run from localStorage
+    const hasBeenRun = localStorage.getItem('vela_first_run_complete');
+    if (!hasBeenRun) {
+      setIsFirstRun(true);
+    }
 
     // Listen for changes
     const handler = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
@@ -16,6 +24,11 @@ function App() {
     
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
+
+  const handleCloseFirstRun = () => {
+    localStorage.setItem('vela_first_run_complete', 'true');
+    setIsFirstRun(false);
+  };
 
   return (
     <ConfigProvider
@@ -34,11 +47,19 @@ function App() {
             bodyBg: 'transparent',
             headerBg: 'transparent',
             siderBg: 'transparent',
+          },
+          Menu: {
+            itemBg: 'transparent',
+            subMenuItemBg: 'transparent'
           }
         }
       }}
     >
       <MainLayout />
+      <FirstRunModal 
+        visible={isFirstRun} 
+        onClose={handleCloseFirstRun} 
+      />
     </ConfigProvider>
   );
 }
