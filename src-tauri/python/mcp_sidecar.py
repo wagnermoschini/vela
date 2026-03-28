@@ -194,6 +194,14 @@ def list_tools():
                     },
                     "required": ["query"]
                 }
+            },
+            {
+                "name": "clear_memory",
+                "description": "Zera toda a memória global (RAG). CUIDADO: Esta ação é irreversível.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
             }
         ])
     return {"tools": tools}
@@ -233,6 +241,14 @@ def call_tool(name, params):
             results = table.search(params.get("query")).limit(params.get("limit", 3)).to_list()
             memories = [{"text": r["text"], "role": r["role"], "date": r["timestamp"]} for r in results]
             return {"memories": memories}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "clear_memory" and LANCEDB_AVAILABLE:
+        try:
+            db.drop_table(TABLE_NAME)
+            table = db.create_table(TABLE_NAME, schema=MemoryRecord)
+            return {"status": "success", "message": "Global memory cleared."}
         except Exception as e:
             return {"error": str(e)}
 

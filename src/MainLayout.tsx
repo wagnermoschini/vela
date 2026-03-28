@@ -9,12 +9,14 @@ import {
   HistoryOutlined,
   ThunderboltOutlined,
   SettingOutlined,
-  GlobalOutlined
+  GlobalOutlined,
+  DashboardOutlined
 } from '@ant-design/icons';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import { SkillsLibrary } from './components/SkillsLibrary';
 import { DiagnosticView } from './components/DiagnosticView';
 import { ConnectorsView } from './components/ConnectorsView';
+import { SettingsView } from './components/SettingsView';
 import { ollamaService } from './services/ollama';
 import { mcpService } from './services/mcpService';
 import { VELA_SYSTEM_PROMPT } from './services/prompts';
@@ -24,16 +26,23 @@ const { Title, Text } = Typography;
 
 export const MainLayout: React.FC = () => {
   const [sandpackVisible, setSandpackVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState<'chat' | 'skills' | 'diagnostic' | 'connectors'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'skills' | 'diagnostic' | 'connectors' | 'settings'>('chat');
   const [isStreaming, setIsStreaming] = useState(false);
   
-  const [messages, setMessages] = useState<any[]>([
-    {
-      key: '1',
-      content: 'Olá! Sou o Vela. Como posso ajudar você hoje?',
-      role: 'ai',
+  const [messages, setMessages] = useState<any[]>(() => {
+    const persist = localStorage.getItem('vela_persist_history') !== 'false';
+    const saved = localStorage.getItem('vela_chat_history');
+    if (persist && saved) {
+      return JSON.parse(saved);
     }
-  ]);
+    return [
+      {
+        key: '1',
+        content: 'Olá! Sou o Vela. Como posso ajudar você hoje?',
+        role: 'ai',
+      }
+    ];
+  });
   const [inputValue, setInputValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -41,6 +50,12 @@ export const MainLayout: React.FC = () => {
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+    
+    // Persist history
+    const persist = localStorage.getItem('vela_persist_history') !== 'false';
+    if (persist && messages.length > 0) {
+      localStorage.setItem('vela_chat_history', JSON.stringify(messages));
     }
   }, [messages]);
 
@@ -78,19 +93,36 @@ export const MainLayout: React.FC = () => {
     chatHistory.push({ role: 'user', content: userMsg.content });
 
     try {
-      // 1. Busca Semântica (Recuperação de Memória)
+      // 1. Busca Semântica (Recuperação de Memória em Duas Camadas)
       let contextPrefix = "";
       try {
-        const memoryResults = await mcpService.callTool('memory_retrieve', { query: inputValue, limit: 3 });
-        if (memoryResults && memoryResults.memories?.length > 0) {
-          const memoriesStr = memoryResults.memories
-            .map((m: any) => `[Em ${m.date}, você disse: ${m.text}]`)
+        // Busca 1: Assunto Atual
+        const subjectResults = await mcpService.callTool('memory_retrieve', { query: inputValue, limit: 3 });
+        // Busca 2: Preferências de Comportamento (Query Fixa)
+        const preferenceResults = await mcpService.callTool('memory_retrieve', { query: "comportamento estilo tom de voz preferências instruções de sistema", limit: 2 });
+        
+        const memories: string[] = [];
+        
+        if (preferenceResults?.memories?.length > 0) {
+          const prefStr = preferenceResults.memories
+            .map((m: any) => `[PREFERÊNCIA/ESTILO]: ${m.text}`)
             .join('\n');
-          contextPrefix = `### CONTEXTO DO PASSADO (Lembre-se disso):\n${memoriesStr}\n\n`;
-          console.info('Contexto recuperado:', contextPrefix);
+          memories.push(`### SUAS PREFERÊNCIAS DE COMPORTAMENTO (Prioridade Máxima):\n${prefStr}`);
+        }
+
+        if (subjectResults?.memories?.length > 0) {
+          const subjStr = subjectResults.memories
+            .map((m: any) => `[Lembrança de ${m.date}]: ${m.text}`)
+            .join('\n');
+          memories.push(`### CONTEXTO DO ASSUNTO (Lembre-se disso):\n${subjStr}`);
+        }
+
+        if (memories.length > 0) {
+          contextPrefix = memories.join('\n\n') + '\n\n';
+          console.info('Contexto Dual-Search recuperado.');
         }
       } catch (memErr) {
-        console.warn('Falha na recuperação de memória:', memErr);
+        console.warn('Falha na recuperação de memória em duas camadas:', memErr);
       }
 
     const finalHistory = [...chatHistory];
@@ -195,13 +227,15 @@ export const MainLayout: React.FC = () => {
                 { type: 'divider' },
                 { key: 'skills', icon: <AppstoreOutlined />, label: 'All Skills (MCP)' },
                 { key: 'connectors', icon: <GlobalOutlined />, label: 'Conectores' },
-                { key: 'diagnostic', icon: <SettingOutlined />, label: 'Diagnostics' },
+                { key: 'diagnostic', icon: <DashboardOutlined />, label: 'Diagnostics' },
+                { key: 'settings', icon: <SettingOutlined />, label: 'Configurações' },
                 { key: 'history', icon: <HistoryOutlined />, label: 'Full History' },
               ]}
               onClick={({ key }) => {
                 if (key === 'skills') setActiveTab('skills');
                 else if (key === 'diagnostic') setActiveTab('diagnostic');
                 else if (key === 'connectors') setActiveTab('connectors');
+                else if (key === 'settings') setActiveTab('settings');
                 else setActiveTab('chat');
               }}
             />
@@ -288,6 +322,8 @@ export const MainLayout: React.FC = () => {
           <SkillsLibrary />
         ) : activeTab === 'connectors' ? (
           <ConnectorsView />
+        ) : activeTab === 'settings' ? (
+          <SettingsView />
         ) : (
           <DiagnosticView />
         )}
