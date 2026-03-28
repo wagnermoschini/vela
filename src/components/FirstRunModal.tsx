@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Typography, Card, Space, Button, Progress, message, Steps, Input, Alert, Tag } from 'antd';
 import { 
   RocketOutlined, 
-  CodeOutlined, 
   GlobalOutlined,
   SafetyCertificateOutlined,
   ArrowRightOutlined,
@@ -22,8 +21,7 @@ interface FirstRunModalProps {
 type ModelStatus = 'pending' | 'downloading' | 'completed' | 'installed';
 
 const RECOMMENDED_MODELS = [
-  { id: 'llama3.1:8b', name: 'Vela Co-work', icon: <RocketOutlined />, desc: 'Llama 3.1 8B - Generalista' },
-  { id: 'qwen2.5-coder:7b', name: 'Vela Code', icon: <CodeOutlined />, desc: 'Qwen 2.5 Coder 7B - Especialista' }
+  { id: 'llama3.1:8b', name: 'Vela Co-work', icon: <RocketOutlined />, desc: 'Llama 3.1 8B - Generalista' }
 ];
 
 export const FirstRunModal: React.FC<FirstRunModalProps> = ({ visible, onClose }) => {

@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layout, Typography, Menu, Button, Space, Divider, Segmented, Badge, message } from 'antd';
+import { Layout, Typography, Menu, Button, Space, Divider, Badge, message } from 'antd';
 import { Sender, Bubble } from '@ant-design/x';
 import { 
   FolderOpenOutlined, 
   MessageOutlined, 
-  CodeOutlined, 
   PlusOutlined, 
   AppstoreOutlined,
   HistoryOutlined,
@@ -25,7 +24,6 @@ const { Title, Text } = Typography;
 export const MainLayout: React.FC = () => {
   const [sandpackVisible, setSandpackVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'skills' | 'diagnostic' | 'connectors'>('chat');
-  const [mode, setMode] = useState<'co-work' | 'code'>('co-work');
   const [isStreaming, setIsStreaming] = useState(false);
   
   const [messages, setMessages] = useState<any[]>([
@@ -66,7 +64,7 @@ export const MainLayout: React.FC = () => {
     setInputValue('');
     setIsStreaming(true);
 
-    const targetModel = mode === 'co-work' ? 'llama3.1:8b' : 'qwen2.5-coder:7b';
+    const targetModel = 'llama3.1:8b';
     
     // Convert current messages to Ollama format
     const chatHistory = messages
@@ -222,20 +220,11 @@ export const MainLayout: React.FC = () => {
               background: 'rgba(255,255,255,0.5)'
             }}>
               <Space size="large">
-                <Title level={5} style={{ margin: 0 }}>Workspace</Title>
-                <Segmented
-                  value={mode}
-                  onChange={(val: any) => setMode(val)}
-                  options={[
-                    { label: 'Vela Co-work', value: 'co-work', icon: <ThunderboltOutlined /> },
-                    { label: 'Vela Code', value: 'code', icon: <CodeOutlined /> },
-                  ]}
-                  style={{ borderRadius: 8 }}
-                />
+                <Title level={5} style={{ margin: 0 }}>Vela Co-work</Title>
               </Space>
               
               <Button 
-                icon={<CodeOutlined />} 
+                icon={<ThunderboltOutlined />} 
                 onClick={() => setSandpackVisible(!sandpackVisible)}
                 type={sandpackVisible ? 'primary' : 'default'}
               >
@@ -278,7 +267,7 @@ export const MainLayout: React.FC = () => {
                   onChange={setInputValue}
                   onSubmit={handleSend}
                   loading={isStreaming}
-                  placeholder={mode === 'co-work' ? "Converse com Llama 3.1..." : "Codifique com Qwen 2.5 Coder..."}
+                  placeholder="Converse com o Vela Co-work..."
                   style={{
                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
                      borderRadius: 12,
