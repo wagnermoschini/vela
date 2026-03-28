@@ -12,7 +12,7 @@
       "allow": [
         {
           "args": true,
-          "name": "python/mcp_sidecar",
+          "name": "bin/mcp_sidecar",
           "sidecar": true
         }
       ]

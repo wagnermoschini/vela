@@ -32,7 +32,7 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "python/mcp_sidecar"
+      "bin/mcp_sidecar"
     ]
   },
   "plugins": {

@@ -72,10 +72,13 @@ export const mcpService = {
           params: {}
         }
       });
-      return response.status === 'success' ? response.data : null;
-    } catch (error) {
+      if (response.status === 'success') {
+        return response.data;
+      }
+      throw new Error(response.message || 'Erro desconhecido no sidecar');
+    } catch (error: any) {
       console.error('Failed to check MCP health:', error);
-      return null;
+      throw error;
     }
   }
 };
