@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Bootstrapper para Local Python (pyenv)
+# Bootstrapper para Local Python (Alpha Stage)
 export PATH="$HOME/.pyenv/shims:$PATH"
 export PYENV_SHELL=zsh
 
@@ -10,7 +10,14 @@ if [ -z "$PYTHON_EXE" ]; then
   PYTHON_EXE="python3"
 fi
 
-# Injeta o código Python e executa
-$PYTHON_EXE -c "
-$PYTHON_CODE
-" "$@"
+# Usa um script Python temporário para evitar problemas de escape no shell
+SCRIPT_DIR="$(dirname "$0")"
+PYTHON_SCRIPT="$SCRIPT_DIR/python/mcp_sidecar.py"
+
+if [ ! -f "$PYTHON_SCRIPT" ]; then
+  # Fallback: Se o script não estiver lá (raro no dev), gera um dummy de erro
+  echo '{"status": "error", "message": "Sidecar script not found"}'
+  exit 1
+fi
+
+$PYTHON_EXE "$PYTHON_SCRIPT" "$@"

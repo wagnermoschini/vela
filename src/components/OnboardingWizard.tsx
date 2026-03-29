@@ -10,10 +10,18 @@ import {
   DesktopOutlined,
   CodeOutlined,
   BookOutlined,
-  UserOutlined
+  UserOutlined,
+  SlackOutlined,
+  MailOutlined,
+  CalendarOutlined,
+  LineChartOutlined,
+  ChromeOutlined,
+  ApiOutlined,
+  ArrowRightOutlined
 } from '@ant-design/icons';
 import { ollamaService } from '../services/ollama';
 import { mcpService } from '../services/mcpService';
+import { auditTrail } from '../services/auditTrail';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -38,6 +46,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ visible, onF
   const [provisioning, setProvisioning] = useState(false);
   const [installStatus, setInstallStatus] = useState<Record<string, { percent: number, status: string }>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [connectorStatus, setConnectorStatus] = useState<any>(null);
 
   // Poll for Ollama
   useEffect(() => {
@@ -45,10 +54,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ visible, onF
     if (visible && currentStep === 0) {
       interval = setInterval(async () => {
         const up = await ollamaService.checkStatus();
-        if (up) {
+        if (up && !ollamaReady) {
           setOllamaReady(true);
-          // Auto move to next step if just detected
-          // setCurrentStep(1); 
+          auditTrail.log('Ollama Watchdog', 'success', { status: 'detected' });
         }
       }, 2000);
     }
@@ -60,30 +68,44 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ visible, onF
     setCurrentStep(1);
     try {
       // 1. Detect Hardware
+      auditTrail.log('Hardware Diagnostic', 'info', { action: 'start' });
       const hw = await mcpService.callTool('detect_hardware', {});
       setHardware(hw);
+      auditTrail.log('Hardware Diagnostic', 'success', hw);
 
       // 2. Install Meta-LLM (Phi3)
+      auditTrail.log('Meta-LLM Provisioning', 'info', { model: 'phi3:mini', action: 'start' });
       setInstallStatus(prev => ({ ...prev, 'phi3:mini': { percent: 0, status: 'Preparando Consultor...' } }));
       await ollamaService.pullModelStream('phi3:mini', (percent, status) => {
         setInstallStatus(prev => ({ ...prev, 'phi3:mini': { percent, status } }));
       });
+      auditTrail.log('Meta-LLM Provisioning', 'success', { model: 'phi3:mini' });
 
       // 3. Consult LLM for best models
-      // TODO: Implementar consulta real à LLM Meta se necessário
-      
-      // Simulação de resposta da LLM Meta (ou busca Tavily) para agilizar o desenvolvimento, 
-      // mas integrando a lógica real:
       setSuggestedModels([
-        { id: hw.ram_gb > 16 ? 'llama3:8b' : 'llama3:7b', space: 'oracle', name: 'Vela Oráculo', reason: 'Melhor raciocínio para agregação global.' },
+        { id: (hw.ram_gb || 0) > 16 ? 'llama3:8b' : 'llama3:7b', space: 'oracle', name: 'Vela Oráculo', reason: 'Melhor raciocínio para agregação global.' },
         { id: 'mistral:latest', space: 'work', name: 'Vela Work', reason: 'Versátil para MCP e automação.' },
         { id: 'phi3:mini', space: 'personal', name: 'Vela Personal', reason: 'Leve e 100% privado.' },
-        { id: hw.ram_gb > 24 ? 'command-r' : 'mistral', space: 'study', name: 'Vela Study', reason: 'Excelente para documentos e RAG longo.' }
+        { id: (hw.ram_gb || 0) > 24 ? 'command-r' : 'mistral', space: 'study', name: 'Vela Study', reason: 'Excelente para documentos e RAG longo.' }
       ]);
       
       setIsAnalyzing(false);
     } catch (err) {
+      auditTrail.log('Onboarding Error', 'error', { step: 'Analysis', message: String(err) });
       message.error('Falha no diagnóstico: ' + String(err));
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleCheckConnectors = async () => {
+    setIsAnalyzing(true);
+    try {
+      const status = await mcpService.callTool('check_connectors', {});
+      setConnectorStatus(status);
+      auditTrail.log('Connectors Audit', 'info', status);
+      setIsAnalyzing(false);
+    } catch (err) {
+      console.error('Failed to check connectors:', err);
       setIsAnalyzing(false);
     }
   };
@@ -109,7 +131,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ visible, onF
   const renderStep0 = () => (
     <div style={{ textAlign: 'center', padding: '20px 0' }}>
       <Avatar size={80} icon={<ThunderboltOutlined />} style={{ backgroundColor: '#1890ff', marginBottom: 24 }} />
-      <Title level={2}>Bem-vindo ao Vela v2</Title>
+      <Title level={2}>Vela AI - Alpha</Title>
       <Paragraph style={{ fontSize: '1.1rem' }}>
         Antes de começarmos, precisamos do seu motor de inteligência local ligado.
       </Paragraph>
@@ -263,10 +285,69 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ visible, onF
           type="primary" 
           size="large" 
           loading={provisioning}
-          onClick={startProvisioning}
+          onClick={async () => {
+            await startProvisioning();
+            setCurrentStep(3);
+            handleCheckConnectors();
+          }}
           style={{ borderRadius: 8 }}
         >
-          Instalar Tudo e Começar
+          Provisionar e Próximo
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderStep3 = () => (
+    <div>
+      <Title level={3}>Hub de Conectores Alpha</Title>
+      <Paragraph type="secondary">Status dos seus sensores e integrações de produtividade.</Paragraph>
+      
+      <Row gutter={[12, 12]}>
+        {[
+          { id: 'slack', name: 'Slack', icon: <SlackOutlined /> },
+          { id: 'gmail', name: 'Gmail', icon: <MailOutlined /> },
+          { id: 'calendar', name: 'Agenda Unificada', icon: <CalendarOutlined /> },
+          { id: 'datadog', name: 'Datadog (Mock)', icon: <LineChartOutlined /> },
+          { id: 'granola', name: 'Granola (Mock)', icon: <ThunderboltOutlined /> },
+          { id: 'ai_news', name: 'AI News Feed', icon: <GlobalOutlined /> },
+          { id: 'chrome', name: 'Chrome Remote', icon: <ChromeOutlined /> }
+        ].map(conn => (
+          <Col span={8} key={conn.id}>
+            <Card size="small" style={{ borderRadius: 10 }}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Space>
+                  <Avatar size="small" icon={conn.icon} style={{ backgroundColor: '#f0f0f0', color: '#666' }} />
+                  <Text strong>{conn.name}</Text>
+                </Space>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Tag color={
+                    connectorStatus?.[conn.id]?.status === 'success' ? 'success' : 
+                    connectorStatus?.[conn.id]?.status === 'warning' ? 'warning' : 'default'
+                  }>
+                    {connectorStatus?.[conn.id]?.msg || 'Verificando...'}
+                  </Tag>
+                  {isAnalyzing && <LoadingOutlined style={{ fontSize: 12 }} />}
+                </div>
+              </Space>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      <div style={{ marginTop: 32, textAlign: 'right' }}>
+        <Button size="large" onClick={() => setCurrentStep(2)} style={{ marginRight: 8 }}>Voltar</Button>
+        <Button 
+          type="primary" 
+          size="large" 
+          onClick={() => {
+            auditTrail.log('Onboarding Finished', 'success');
+            onFinish({ spaces: selectedSpaces, models: suggestedModels, connectors: connectorStatus });
+          }}
+          disabled={provisioning}
+          style={{ borderRadius: 8, background: '#1890ff' }}
+        >
+          Finalizar Configuração
         </Button>
       </div>
     </div>
@@ -277,29 +358,30 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ visible, onF
       open={visible}
       footer={null}
       closable={false}
-      width={700}
+      width={720}
       centered
       bodyStyle={{ padding: '32px 40px' }}
-      style={{ borderRadius: 20 }}
+      style={{ borderRadius: 24, overflow: 'hidden' }}
     >
       <Steps
         current={currentStep}
         size="small"
         style={{ marginBottom: 40 }}
         items={[
-          { title: 'Ollama', icon: <ThunderboltOutlined /> },
+          { title: 'Motor', icon: <ThunderboltOutlined /> },
           { title: 'Espaços', icon: <AppstoreOutlined /> },
-          { title: 'Cérebro', icon: <RocketOutlined /> }
+          { title: 'Cérebro', icon: <RocketOutlined /> },
+          { title: 'Sensores', icon: <ApiOutlined /> }
         ]}
       />
 
       {currentStep === 0 && renderStep0()}
       {currentStep === 1 && renderStep1()}
       {currentStep === 2 && renderStep2()}
+      {currentStep === 3 && renderStep3()}
     </Modal>
   );
 };
 
 // Placeholder icons if needed
-const ArrowRightOutlined = () => <RocketOutlined style={{ transform: 'rotate(90deg)' }} />;
 const AppstoreOutlined = () => <DesktopOutlined />;

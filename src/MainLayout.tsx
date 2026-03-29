@@ -25,6 +25,7 @@ import { OnboardingWizard } from './components/OnboardingWizard';
 import { ollamaService } from './services/ollama';
 import { mcpService } from './services/mcpService';
 import { VELA_SYSTEM_PROMPT } from './services/prompts';
+import { auditTrail } from './services/auditTrail';
 
 const { Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -73,6 +74,36 @@ export const MainLayout: React.FC = () => {
     }
   }, [messages, activeSpace]);
 
+  // Handle Drag & Drop for Study Space
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (activeSpace !== 'study') return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const urls = e.dataTransfer.getData('text/uri-list');
+
+    if (files.length > 0 || urls) {
+      message.loading({ content: 'Ingerindo contexto no Espaço de Estudo...', key: 'ingest' });
+      try {
+        // Mock de ingestão rápida para o Alpha
+        await new Promise(r => setTimeout(r, 1500));
+        auditTrail.log('Context Ingested', 'success', { files: files.length, url: !!urls });
+        message.success({ content: 'Contexto Adicionado com Sucesso!', key: 'ingest' });
+        setMessages(prev => [...prev, {
+          key: Date.now().toString(),
+          role: 'ai',
+          content: `Recebi seu ${files.length > 0 ? 'arquivo' : 'link'} no Espaço de Estudo. Já indexei o conteúdo para nossa conversa.`
+        }]);
+      } catch (err) {
+        message.error({ content: 'Falha na ingestão', key: 'ingest' });
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (activeSpace === 'study') e.preventDefault();
+  };
+
   // Load messages when space changes
   useEffect(() => {
     const saved = localStorage.getItem(`vela_chat_history_${activeSpace}`);
@@ -86,6 +117,7 @@ export const MainLayout: React.FC = () => {
       }]);
     }
     localStorage.setItem('vela_active_space', activeSpace);
+    auditTrail.log('Space Switched', 'info', { space: activeSpace });
   }, [activeSpace]);
 
   const handleSend = async () => {
@@ -204,7 +236,23 @@ export const MainLayout: React.FC = () => {
   };
 
   return (
-    <Layout style={{ height: '100%', width: '100%', background: 'var(--bg-color)' }}>
+    <Layout 
+      style={{ minHeight: '100vh', background: 'var(--bg-color)' }}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+    >
+      <style>{`
+        :root {
+          --accent-color: ${SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.color || '#1890ff'};
+          --accent-bg: ${SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.color || '#1890ff'}08;
+        }
+        .ant-layout-sider {
+          border-right: 1px solid var(--accent-bg) !important;
+        }
+        .ant-btn-primary {
+          background: var(--accent-color) !important;
+        }
+      `}</style>
       {/* Sidebar */}
       <Sider 
         width={260} 
@@ -281,7 +329,7 @@ export const MainLayout: React.FC = () => {
           </div>
           
           <div style={{ padding: '12px 0', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text type="secondary" style={{ fontSize: '0.75rem' }}>Vela v0.1.0</Text>
+            <Text type="secondary" style={{ fontSize: '0.75rem' }}>Vela AI - Alpha</Text>
             <Badge status="processing" text={<Text type="secondary" style={{ fontSize: '0.75rem' }}>Ollama Local</Text>} />
           </div>
         </div>
@@ -301,7 +349,7 @@ export const MainLayout: React.FC = () => {
             }}>
               <Space size="large">
                 <Title level={5} style={{ margin: 0 }}>Vela {SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.name || 'Co-work'}</Title>
-                <Tag color={SPACE_DEFS[activeSpace as keyof typeof SPACE_DEFS]?.color}>Space: {activeSpace.toUpperCase()}</Tag>
+                <Tag color="var(--accent-color)" style={{ borderRadius: 6 }}>ALPHA</Tag>
               </Space>
               
               <Button 

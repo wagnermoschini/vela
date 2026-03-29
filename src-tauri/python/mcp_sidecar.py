@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 import json
 import logging
@@ -6,6 +5,14 @@ import os
 import datetime
 import platform
 import subprocess
+import time
+
+# Configuração de logging e ambiente (Nível ALPHA)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] ALPHA-AUDIT: %(message)s",
+    filename="mcp_sidecar.log"
+)
 
 # Tentativa de importar LanceDB para RAG (Retrieval-Augmented Generation)
 try:
@@ -13,7 +20,9 @@ try:
     from lancedb.embeddings import get_registry
     from lancedb.pydantic import LanceModel, Vector
     LANCEDB_AVAILABLE = True
-except ImportError:
+    logging.info("LanceDB modules loaded successfully.")
+except Exception as e:
+    logging.error(f"LanceDB import error: {e}", exc_info=True)
     LANCEDB_AVAILABLE = False
 
 try:
@@ -23,10 +32,10 @@ try:
 except ImportError:
     DOTENV_AVAILABLE = False
 
-# Configuração de logging e ambiente
+# Configuração de logging e ambiente (Nível ALPHA)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] MCP-Vela: %(message)s",
+    format="%(asctime)s [%(levelname)s] ALPHA-AUDIT: %(message)s",
     filename="mcp_sidecar.log"
 )
 
@@ -130,7 +139,7 @@ def web_search(query):
         return {"error": f"Erro na busca Tavily: {str(e)}"}
 
 def detect_hardware():
-    """Detecta RAM e CPU (otimizado para Mac)."""
+    """Detecta RAM e CPU (otimizado para Mac) e gera relatório de auditoria."""
     try:
         # RAM
         ram_bytes = subprocess.check_output(['sysctl', '-n', 'hw.memsize']).decode().strip()
@@ -139,13 +148,22 @@ def detect_hardware():
         # CPU
         cpu_brand = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
         
-        return {
+        report = {
             "ram_gb": round(ram_gb, 2),
             "cpu": cpu_brand,
             "os": f"{platform.system()} {platform.machine()}",
-            "is_apple_silicon": "Apple" in cpu_brand
+            "is_apple_silicon": "Apple" in cpu_brand,
+            "at": datetime.datetime.now().isoformat()
         }
+        
+        # Salva auditoria manual em JSON
+        with open("hardware_audit.json", "w") as f:
+            json.dump(report, f, indent=4)
+        logging.info(f"Diagnóstico de hardware concluído e auditado: {report['ram_gb']}GB RAM.")
+        
+        return report
     except Exception as e:
+        logging.error(f"Erro no diagnóstico de hardware: {e}")
         return {"error": f"Erro ao detectar hardware: {str(e)}"}
 
 def list_tools():
@@ -207,11 +225,12 @@ def list_tools():
             },
             {
                 "name": "memory_retrieve",
-                "description": "Busca lembranças passadas.",
+                "description": "Busca lembranças passadas por espaço.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {"type": "string"},
+                        "space_id": {"type": "string", "default": "default"},
                         "limit": {"type": "integer", "default": 3}
                     },
                     "required": ["query"]
@@ -226,6 +245,36 @@ def list_tools():
                 }
             },
             {
+                "name": "check_connectors",
+                "description": "Verifica o status de disponibilidade dos conectores (Slack, Gmail, Agenda, etc).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "unified_agenda",
+                "description": "Consolida eventos de Trabalho e Pessoal para detectar conflitos.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string", "description": "ISO date for check"}
+                    }
+                }
+            },
+            {
+                "name": "chrome_control",
+                "description": "Ações no Chrome via porta de depuração remota.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {"type": "string", "enum": ["open_window", "list_tabs", "extract_content"]},
+                        "url": {"type": "string"}
+                    },
+                    "required": ["action"]
+                }
+            },
+            {
                 "name": "detect_hardware",
                 "description": "Detecta especificações de hardware (RAM, CPU) para sugerir a melhor LLM.",
                 "parameters": {
@@ -237,6 +286,7 @@ def list_tools():
     return {"tools": tools}
 
 def call_tool(name, params):
+    global table, db
     if name == "read_file":
         path = params.get("path")
         try:
@@ -257,6 +307,39 @@ def call_tool(name, params):
     elif name == "detect_hardware":
         return detect_hardware()
 
+    elif name == "check_connectors":
+        # Mock de simulação conforme solicitado (Alpha Phase)
+        return {
+            "slack": {"status": "success" if os.getenv("SLACK_TOKEN") else "warning", "msg": "Pronto" if os.getenv("SLACK_TOKEN") else "Pendente"},
+            "gmail": {"status": "success" if os.getenv("GMAIL_TOKEN") else "warning", "msg": "Pronto" if os.getenv("GMAIL_TOKEN") else "Pendente"},
+            "calendar": {"status": "success", "msg": "OK - Agenda Unificada Ativa"},
+            "datadog": {"status": "pending", "msg": "Mock de Simulação Ativo"},
+            "granola": {"status": "pending", "msg": "Mock de Simulação Ativo"},
+            "ai_news": {"status": "success", "msg": "Feed Alpha Ativo"}
+        }
+
+    elif name == "unified_agenda":
+        # Mock de conflito real para teste do Oráculo
+        return [
+            {"id": "1", "title": "Check-in Sprint Vela", "start": "2026-03-30T10:00:00", "end": "2026-03-30T11:00:00", "space": "work"},
+            {"id": "2", "title": "Dentista (Pessoal)", "start": "2026-03-30T10:30:00", "end": "2026-03-30T12:00:00", "space": "personal"}
+        ]
+
+    elif name == "chrome_control":
+        action = params.get("action")
+        url = params.get("url", "https://google.com")
+        try:
+            if action == "open_window":
+                # Tenta abrir o Chrome com porta de depuração remota se não estiver aberto
+                # No macOS: /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+                subprocess.Popen(['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', 
+                                 '--remote-debugging-port=9222', 
+                                 '--new-window', url])
+                return {"status": "success", "message": f"Janela do Chrome aberta em {url}"}
+            return {"status": "error", "message": f"Ação {action} ainda não implementada no driver Alpha."}
+        except Exception as e:
+            return {"error": str(e)}
+
     elif name == "memory_store" and LANCEDB_AVAILABLE:
         try:
             table.add([{
@@ -276,14 +359,22 @@ def call_tool(name, params):
             space_id = params.get("space_id", "default")
             
             # Oráculo busca em tudo, outros buscam filtrado
+            logging.info(f"RAG Retrieval: '{query}' em espaço '{space_id}'")
             search_op = table.search(query)
             if space_id != "oracle":
                 search_op = search_op.where(f"space_id = '{space_id}'")
             
             results = search_op.limit(params.get("limit", 3)).to_list()
-            memories = [{"text": r["text"], "role": r["role"], "date": r["timestamp"]} for r in results]
+            
+            # Filtro de relevância Alpha: Ignora se a distância for muito grande? 
+            # (Opcional, mas por enquanto vamos confiar na filtragem de space_id).
+            memories = [
+                {"text": r["text"], "role": r["role"], "date": r["timestamp"]} 
+                for r in results if "_distance" not in r or r["_distance"] < 1.0
+            ]
             return {"memories": memories}
         except Exception as e:
+            logging.error(f"Erro no RAG: {e}")
             return {"error": str(e)}
 
     elif name == "clear_memory" and LANCEDB_AVAILABLE:
@@ -320,7 +411,16 @@ def process_payload(payload_str):
                 }
             }
         elif action == "call_tool":
-            result = call_tool(params.get("name"), params.get("arguments", {}))
+            tool_name = params.get("name")
+            args = params.get("arguments", {})
+            start_time = time.time()
+            
+            logging.info(f"Chamando Ferramenta: {tool_name} com args: {args}")
+            result = call_tool(tool_name, args)
+            
+            duration = time.time() - start_time
+            logging.info(f"Concluído: {tool_name} em {duration:.4f}s. Sucesso: {'error' not in result}")
+            
             return {"status": "success", "data": result}
         return {"status": "error", "message": f"Ação '{action}' desconhecida."}
     except Exception as e:
